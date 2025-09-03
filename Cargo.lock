@@ -99,7 +99,7 @@ version = "0.11.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a229bfd78e4827c91b9b95784f69492c1b77c1ab75a45a8a037b139215086f94"
 dependencies = [
- "hybrid-array",
+ "hybrid-array 0.3.1",
 ]
 
 [[package]]
@@ -335,7 +335,7 @@ version = "0.7.0-pre.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edaae5fb9dac79a07260e0b2006799ff4f1d342ab243fd7d0892215113b27904"
 dependencies = [
- "hybrid-array",
+ "hybrid-array 0.3.1",
  "num-traits",
  "rand_core",
  "subtle",
@@ -348,7 +348,7 @@ version = "0.2.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a23fa214dea9efd4dacee5a5614646b30216ae0f05d4bb51bafb50e9da1c5be"
 dependencies = [
- "hybrid-array",
+ "hybrid-array 0.3.1",
  "rand_core",
 ]
 
@@ -453,7 +453,7 @@ dependencies = [
  "ff",
  "group",
  "hkdf",
- "hybrid-array",
+ "hybrid-array 0.3.1",
  "rand_core",
  "sec1",
  "subtle",
@@ -512,7 +512,7 @@ dependencies = [
  "bincode",
  "criterion",
  "hex",
- "hybrid-array",
+ "hybrid-array 0.4.0",
  "openssl-sys",
  "postcard",
  "rand_chacha",
@@ -699,12 +699,21 @@ dependencies = [
 
 [[package]]
 name = "hybrid-array"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dab50e193aebe510fe0e40230145820e02f48dae0cf339ea4204e6e708ff7bd"
+checksum = "891d15931895091dea5c47afa5b3c9a01ba634b311919fd4d41388fa0e3d76af"
 dependencies = [
  "typenum",
  "zeroize",
+]
+
+[[package]]
+name = "hybrid-array"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe39a812f039072707ce38020acbab2f769087952eddd9e2b890f37654b2349"
+dependencies = [
+ "typenum",
 ]
 
 [[package]]
@@ -723,7 +732,7 @@ version = "0.2.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac5e145e8ade9f74c0a5efc60ccb4e714b0144f7e2220b7ca64254feee71c57f"
 dependencies = [
- "hybrid-array",
+ "hybrid-array 0.3.1",
 ]
 
 [[package]]
@@ -860,7 +869,7 @@ dependencies = [
  "crypto-common",
  "hex",
  "hex-literal",
- "hybrid-array",
+ "hybrid-array 0.4.0",
  "kem",
  "num-rational",
  "rand",
@@ -1307,7 +1316,7 @@ checksum = "a017a4aa8f0bd51e9d0184d98042dfe9285218fec098493f47d9a8aa0f1a3f27"
 dependencies = [
  "base16ct",
  "der",
- "hybrid-array",
+ "hybrid-array 0.3.1",
  "subtle",
  "zeroize",
 ]
