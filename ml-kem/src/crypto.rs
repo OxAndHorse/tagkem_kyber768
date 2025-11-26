@@ -31,6 +31,29 @@ pub fn G(inputs: &[impl AsRef<[u8]>]) -> (B32, B32) {
     (a, b)
 }
 
+/// G function with tag support for Tag-based KEM
+pub fn G_with_tag(inputs: &[impl AsRef<[u8]>], tag: &[u8]) -> (B32, B32) {
+    let mut h = Sha3_512::new();
+    
+    // 首先哈希所有输入
+    for x in inputs {
+        Digest::update(&mut h, x);
+    }
+    
+    // 然后哈希标签（可以添加域分隔符以防止混淆）
+    Digest::update(&mut h, b"tag:");
+    Digest::update(&mut h, tag);
+    
+    let out = h.finalize();
+
+    let mut a = B32::default();
+    let mut b = B32::default();
+
+    a.copy_from_slice(&out[..32]);
+    b.copy_from_slice(&out[32..]);
+    (a, b)
+}
+
 pub fn H(x: impl AsRef<[u8]>) -> B32 {
     let mut h = Sha3_256::new();
     Digest::update(&mut h, x);

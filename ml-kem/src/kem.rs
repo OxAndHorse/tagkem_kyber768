@@ -3,11 +3,12 @@ use core::marker::PhantomData;
 use hybrid_array::typenum::U32;
 use rand_core::CryptoRng;
 
-use crate::crypto::{G, H, J, rand};
+use crate::crypto::{rand, G_with_tag, G, H, J};
 use crate::param::{DecapsulationKeySize, EncapsulationKeySize, EncodedCiphertext, KemParams};
 use crate::pke::{DecryptionKey, EncryptionKey};
 use crate::util::B32;
 use crate::{Encoded, EncodedSizeUser};
+use crate::{TagBasedDecapsulate, TagBasedEncapsulate};
 
 #[cfg(feature = "zeroize")]
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -25,8 +26,8 @@ pub struct DecapsulationKey<P>
 where
     P: KemParams,
 {
-    dk_pke: DecryptionKey<P>,
-    ek: EncapsulationKey<P>,
+    dk_pke: DecryptionKey<P>,//私钥
+    ek: EncapsulationKey<P>,//公钥
     z: B32,
 }
 
@@ -82,6 +83,7 @@ fn constant_time_eq(x: u8, y: u8) -> u8 {
     0u8.wrapping_sub(is_zero >> 7)
 }
 
+//为解封装密钥struct实现kem的解封装方法
 impl<P> ::kem::Decapsulate<EncodedCiphertext<P>, SharedKey> for DecapsulationKey<P>
 where
     P: KemParams,
@@ -117,10 +119,11 @@ where
     }
 }
 
+//解封装密钥关联函数
 impl<P> DecapsulationKey<P>
 where
     P: KemParams,
-{
+{  
     /// Get the [`EncapsulationKey`] which corresponds to this [`DecapsulationKey`].
     pub fn encapsulation_key(&self) -> &EncapsulationKey<P> {
         &self.ek
@@ -153,6 +156,7 @@ where
     h: B32,
 }
 
+//封装密钥关联函数
 impl<P> EncapsulationKey<P>
 where
     P: KemParams,
@@ -164,6 +168,13 @@ where
 
     fn encapsulate_deterministic_inner(&self, m: &B32) -> (EncodedCiphertext<P>, SharedKey) {
         let (K, r) = G(&[m, &self.h]);
+        let c = self.ek_pke.encrypt(m, &r);
+        (c, K)
+    }
+
+    fn encapsulate_deterministic_inner_with_tag(&self, m: &B32, 
+        tag: &[u8]) -> (EncodedCiphertext<P>, SharedKey) {
+        let (K, r) = G_with_tag(&[m, &self.h],tag);
         let c = self.ek_pke.encrypt(m, &r);
         (c, K)
     }
@@ -184,6 +195,7 @@ where
     }
 }
 
+//为封装密钥结构体实现KEm的封装算法
 impl<P> ::kem::Encapsulate<EncodedCiphertext<P>, SharedKey> for EncapsulationKey<P>
 where
     P: KemParams,
@@ -198,6 +210,78 @@ where
         Ok(self.encapsulate_deterministic_inner(&m))
     }
 }
+
+// 在 kem.rs 中添加以下实现
+
+impl<P> TagBasedEncapsulate<EncodedCiphertext<P>, SharedKey> for EncapsulationKey<P>
+where
+    P: KemParams,
+{
+    type Error = Infallible;
+
+    fn encapsulate_with_tag<R: CryptoRng + ?Sized>(
+        &self,
+        rng: &mut R,
+        tag: &[u8],
+    ) -> Result<(EncodedCiphertext<P>, SharedKey), Self::Error> {
+        let m: B32 = rand(rng);
+        Ok(self.encapsulate_deterministic_with_tag(&m, tag))
+    }
+}
+
+impl<P> TagBasedDecapsulate<EncodedCiphertext<P>, SharedKey> for DecapsulationKey<P>
+where
+    P: KemParams,
+{
+    type Error = Infallible;
+
+    fn decapsulate_with_tag(
+        &self,
+        encapsulated_key: &EncodedCiphertext<P>,
+        tag: &[u8],
+    ) -> Result<SharedKey, Self::Error> {
+        let mp = self.dk_pke.decrypt(encapsulated_key);
+        
+        // 在密钥派生中加入标签
+        let (Kp, rp) = G_with_tag(&[&mp, &self.ek.h], tag);
+        
+        // 在备选密钥计算中加入标签
+        let Kbar = J(&[self.z.as_slice(), encapsulated_key.as_ref(), tag]);
+        
+        let cp = self.ek.ek_pke.encrypt(&mp, &rp);
+
+        // 常量时间比较
+        let equal = cp
+            .iter()
+            .zip(encapsulated_key.iter())
+            .map(|(&x, &y)| constant_time_eq(x, y))
+            .fold(0xff, |x, y| x & y);
+            
+        Ok(Kp
+            .iter()
+            .zip(Kbar.iter())
+            .map(|(x, y)| (equal & x) | (!equal & y))
+            .collect())
+    }
+}
+
+impl<P> EncapsulationKey<P>
+where
+    P: KemParams,
+{
+    // 新增带标签的方法
+    fn encapsulate_deterministic_with_tag(
+        &self, 
+        m: &B32, 
+        tag: &[u8]
+    ) -> (EncodedCiphertext<P>, SharedKey) {
+        // 在密钥派生中加入标签
+        let (K, r) = G_with_tag(&[m, &self.h], tag);
+        let c = self.ek_pke.encrypt(m, &r);
+        (c, K)
+    }
+}
+
 
 #[cfg(feature = "deterministic")]
 impl<P> crate::EncapsulateDeterministic<EncodedCiphertext<P>, SharedKey> for EncapsulationKey<P>
@@ -214,10 +298,38 @@ where
     }
 }
 
+#[cfg(feature = "deterministic")]
+impl<P> crate::TagEncapsulateDeterministic<EncodedCiphertext<P>, SharedKey> for EncapsulationKey<P>
+where
+    P: KemParams,
+{
+    type Error = Infallible;
+
+    fn encapsulate_deterministic_with_tag(
+        &self,
+        m: &B32,
+        tag: &[u8] 
+    ) -> Result<(EncodedCiphertext<P>, SharedKey), Self::Error> {
+        Ok(self.encapsulate_deterministic_inner_with_tag(m,tag))
+    }
+}
+
+
+
 /// An implementation of overall ML-KEM functionality.  Generic over parameter sets, but then ties
 /// together all of the other related types and sizes.
 #[derive(Clone)]
 pub struct Kem<P>
+where
+    P: KemParams,
+{
+    _phantom: PhantomData<P>,
+}
+
+/// An implementation of overall tag ML-KEM functionality.  Generic over parameter sets, but then ties
+/// together all of the other related types and sizes.
+#[derive(Clone)]
+pub struct TagKem<P>
 where
     P: KemParams,
 {
@@ -253,25 +365,65 @@ where
     }
 }
 
+impl<P> crate::TagBasedKemCore for TagKem<P>
+where
+    P: KemParams,
+{
+    type TagSharedKeySize = U32;
+    type TagCiphertextSize = P::CiphertextSize;
+    type TagDecapsulationKey = DecapsulationKey<P>;
+    type TagEncapsulationKey = EncapsulationKey<P>;
+
+    /// Generate a new (decapsulation, encapsulation) key pair
+    fn generate<R: CryptoRng + ?Sized>(
+        rng: &mut R,
+    ) -> (Self::TagDecapsulationKey, Self::TagEncapsulationKey) {
+        let dk = Self::TagDecapsulationKey::generate(rng);
+        let ek = dk.encapsulation_key().clone();
+        (dk, ek)
+    }
+
+    #[cfg(feature = "deterministic")]
+    fn generate_deterministic(
+        d: &B32,
+        z: &B32,
+    ) -> (Self::TagDecapsulationKey, Self::TagEncapsulationKey) {
+        let dk = Self::TagDecapsulationKey::generate_deterministic(d, z);
+        let ek = dk.encapsulation_key().clone();
+        (dk, ek)
+    }
+}
+
+
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::{MlKem512Params, MlKem768Params, MlKem1024Params};
     use ::kem::{Decapsulate, Encapsulate};
+    // use rand::{rngs::OsRng, RngCore, CryptoRng};
+    use hex; // <--- 需要在 Cargo.toml 里加上 hex = "0.4"
 
     fn round_trip_test<P>()
     where
         P: KemParams,
     {
         let mut rng = rand::rng();
-
+        // let mut rng = OsRng;
+        // let mut rng = rand::thread_rng();
         let dk = DecapsulationKey::<P>::generate(&mut rng);
         let ek = dk.encapsulation_key();
-
         let (ct, k_send) = ek.encapsulate(&mut rng).unwrap();
+        // 打印密文 & 共享密钥
+        println!("Ciphertext (hex): {}", hex::encode(ct.as_ref()as &[u8]));
+        println!("Shared secret (sender): {}", hex::encode(k_send.as_ref()as &[u8]));
+        
         let k_recv = dk.decapsulate(&ct).unwrap();
+        println!("Shared secret (receiver): {}", hex::encode(k_recv.as_ref()as &[u8]));
         assert_eq!(k_send, k_recv);
+
     }
+
+    
 
     #[test]
     fn round_trip() {
@@ -304,3 +456,4 @@ mod test {
         codec_test::<MlKem1024Params>();
     }
 }
+
