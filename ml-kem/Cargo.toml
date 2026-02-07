@@ -21,7 +21,7 @@ zeroize = ["dep:zeroize"]
 
 [dependencies]
 kem = "0.3.0-pre.0"
-hybrid-array = { version = "0.3", features = ["extra-sizes"] }
+hybrid-array = { version = "0.4", features = ["extra-sizes"] }
 rand_core = "0.9"
 rand="0.9"
 hex = "0.4"
